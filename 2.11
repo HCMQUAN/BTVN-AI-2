@@ -1,0 +1,106 @@
+import numpy as np
+import skfuzzy as fuzzy
+from skfuzzy import control as ctrl
+from ipywidgets import widgets, interact_manual
+from IPython.display import display
+
+distance = ctrl.Antecedent(np.arange(0, 51, 1), 'distance')
+traffic = ctrl.Antecedent(np.arange(0, 101, 1), 'traffic')
+demand = ctrl.Antecedent(np.arange(0, 101, 1), 'demand')
+weather = ctrl.Antecedent(np.arange(0, 11, 1), 'weather')
+rating = ctrl.Antecedent(np.arange(1, 6, 1), 'rating')
+punctuality = ctrl.Antecedent(np.arange(0, 101, 1), 'punctuality')
+
+price = ctrl.Consequent(np.arange(0, 101, 1), 'price')
+points = ctrl.Consequent(np.arange(0, 101, 1), 'points')
+
+distance['short'] = fuzzy.trapmf(distance.universe, [0, 0, 3, 5])
+distance['medium'] = fuzzy.trimf(distance.universe, [2, 5, 8])
+distance['long'] = fuzzy.trimf(distance.universe, [6, 13, 20])
+distance['very_long'] = fuzzy.trapmf(distance.universe, [15, 30, 50, 50])
+
+for var in [traffic, demand]:
+    var['low'] = fuzzy.trapmf(var.universe, [0, 0, 20, 30])
+    var['medium'] = fuzzy.trimf(var.universe, [20, 50, 70])
+    var['high'] = fuzzy.trapmf(var.universe, [60, 80, 100, 100])
+
+weather['good'] = fuzzy.trimf(weather.universe, [0, 0, 4])
+weather['moderate'] = fuzzy.trimf(weather.universe, [3, 5, 8])
+weather['bad'] = fuzzy.trimf(weather.universe, [7, 10, 10])
+
+rating['poor'] = fuzzy.trimf(rating.universe, [1, 1, 2.5])
+rating['average'] = fuzzy.trimf(rating.universe, [2, 3, 4])
+rating['good'] = fuzzy.trimf(rating.universe, [3.5, 5, 5])
+
+punctuality['late'] = fuzzy.trimf(punctuality.universe, [0, 0, 50])
+punctuality['on_time'] = fuzzy.trimf(punctuality.universe, [40, 60, 80])
+punctuality['early'] = fuzzy.trimf(punctuality.universe, [70, 100, 100])
+
+for var in [price, points]:
+    var['low'] = fuzzy.trimf(var.universe, [0, 0, 30])
+    var['medium'] = fuzzy.trimf(var.universe, [20, 50, 80])
+    var['high'] = fuzzy.trimf(var.universe, [60, 80, 100])
+    var['very_high'] = fuzzy.trapmf(var.universe, [80, 90, 100, 100])
+
+rules = [
+    ctrl.Rule(distance['short'] & traffic['low'] & demand['low'], price['low']),
+    ctrl.Rule(distance['short'] & traffic['medium'] & demand['high'], price['medium']),
+    ctrl.Rule(distance['medium'] & traffic['high'] & demand['high'], price['high']),
+    ctrl.Rule(distance['long'] & traffic['medium'] & weather['good'], price['medium']),
+    ctrl.Rule(distance['long'] & traffic['high'] & weather['bad'], price['very_high']),
+    ctrl.Rule(distance['very_long'] & traffic['high'] & demand['high'], price['very_high']),
+    ctrl.Rule(distance['medium'] & traffic['low'] & demand['low'], price['medium']),
+    ctrl.Rule(distance['short'] & traffic['high'] & weather['bad'], price['high']),
+    ctrl.Rule(distance['very_long'] & weather['bad'], price['very_high']),
+    ctrl.Rule(distance['medium'] & traffic['medium'] & weather['moderate'], price['medium']),
+    ctrl.Rule(rating['good'] & punctuality['early'], points['high']),
+    ctrl.Rule(rating['average'] & punctuality['on_time'], points['medium']),
+    ctrl.Rule(rating['poor'] & punctuality['late'], points['low']),
+    ctrl.Rule(distance['long'] & traffic['high'] & punctuality['on_time'], points['high']),
+    ctrl.Rule(distance['medium'] & traffic['medium'] & rating['good'], points['medium']),
+    ctrl.Rule(rating['poor'] & punctuality['late'], points['low']),
+    ctrl.Rule(distance['very_long'] & weather['bad'] & rating['good'], points['high']),
+    ctrl.Rule(distance['short'] & rating['average'] & punctuality['on_time'], points['low']),
+    ctrl.Rule(distance['long'] & traffic['high'] & punctuality['late'], points['low']),
+    ctrl.Rule(distance['medium'] & weather['moderate'] & rating['good'], points['medium'])
+]
+
+grab_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem(rules))
+print("--- HỆ THỐNG GIÁ TIỀN & ĐIỂM THƯỞNG GRAB-BIKE ---")
+
+@interact_manual(
+    Khoang_cach_km=(0, 50, 1),
+    Giao_thong_percent=(0, 100, 5),
+    Nhu_cau_percent=(0, 100, 5),
+    Thoi_tiet=(0, 10, 1),
+    Rating_sao=(1.0, 5.0, 0.1),
+    Dung_gio_percent=(0, 100, 5)
+)
+def run_simulation(Khoang_cach_km, Giao_thong_percent, Nhu_cau_percent, Thoi_tiet, Rating_sao, Dung_gio_percent):
+    grab_sim.input['distance'] = Khoang_cach_km
+    grab_sim.input['traffic'] = Giao_thong_percent
+    grab_sim.input['demand'] = Nhu_cau_percent
+    grab_sim.input['weather'] = Thoi_tiet
+    grab_sim.input['rating'] = Rating_sao
+    grab_sim.input['punctuality'] = Dung_gio_percent
+    
+    try:
+        grab_sim.compute()
+        p = grab_sim.output['price']
+        pts = grab_sim.output['points']
+        
+        print("\n" + "="*30)
+        print(f"THÔNG TIN ĐẦU VÀO:")
+        print(f"- Khoảng cách: {Khoang_cach_km} km")
+        print(f"- Lưu lượng giao thông: {Giao_thong_percent}%")
+        print(f"- Nhu cầu đặt xe: {Nhu_cau_percent}%")
+        print(f"- Thời tiết (0-Tốt, 10-Xấu): {Thoi_tiet}")
+        print(f"- Đánh giá tài xế: {Rating_sao} sao")
+        print(f"- Độ đúng giờ: {Dung_gio_percent}%")
+        print("="*30)
+        print(f"KẾT QUẢ TÍNH TOÁN MỜ:")
+        print(f">> GIÁ TIỀN: {p:.2f} (đơn vị trọng số)")
+        print(f">> ĐIỂM THƯỞNG: {pts:.2f} (điểm)")
+        print("="*30)
+    except:
+        print("Lỗi: Đầu vào chưa đủ để kích hoạt các luật mờ. Hãy thử thay đổi thông số.")
