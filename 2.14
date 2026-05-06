@@ -1,0 +1,73 @@
+import numpy as np
+import skfuzzy as fuzzy
+from skfuzzy import control as ctrl
+from ipywidgets import widgets, interact_manual
+density = ctrl.Antecedent(np.arange(0, 101, 1), 'density')    
+urgency = ctrl.Antecedent(np.arange(0, 101, 1), 'urgency')     
+load = ctrl.Antecedent(np.arange(0, 101, 1), 'load')          
+traffic = ctrl.Antecedent(np.arange(0, 101, 1), 'traffic')   
+profit = ctrl.Antecedent(np.arange(0, 101, 1), 'profit')      
+
+combine = ctrl.Consequent(np.arange(0, 11, 1), 'combine')     
+priority = ctrl.Consequent(np.arange(0, 101, 1), 'priority')   
+
+for var in [density, urgency, load, traffic, profit]:
+    var['low'] = fuzzy.trapmf(var.universe, [0, 0, 20, 40])
+    var['medium'] = fuzzy.trimf(var.universe, [30, 50, 70])
+    var['high'] = fuzzy.trapmf(var.universe, [60, 80, 100, 100])
+
+combine['few'] = fuzzy.trimf(combine.universe, [0, 0, 4])
+combine['some'] = fuzzy.trimf(combine.universe, [3, 5, 7])
+combine['many'] = fuzzy.trapmf(combine.universe, [6, 8, 10, 10])
+
+priority['low'] = fuzzy.trimf(priority.universe, [0, 0, 40])
+priority['medium'] = fuzzy.trimf(priority.universe, [30, 50, 70])
+priority['high'] = fuzzy.trapmf(priority.universe, [60, 85, 100, 100])
+
+rules = [
+    ctrl.Rule(density['high'] & load['low'] & traffic['low'], combine['many']),
+    ctrl.Rule(density['medium'] & traffic['high'] & urgency['medium'], combine['some']),
+    ctrl.Rule(load['high'] & density['high'] & profit['medium'], combine['some']),
+    ctrl.Rule(density['low'] & urgency['high'] & traffic['medium'], combine['some']),
+    ctrl.Rule(profit['high'] & urgency['high'] & traffic['high'], combine['some']),
+    ctrl.Rule(urgency['high'] & profit['high'], priority['high']),
+    ctrl.Rule(urgency['medium'] & traffic['medium'], priority['medium']),
+    ctrl.Rule(urgency['low'] & density['high'] & profit['low'], priority['low'])
+]
+
+logistics_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem(rules))
+print("--- HỆ THỐNG TỐI ƯU HÓA GIAO NHẬN LOGISTICS (BÀI 2.14) ---")
+
+@interact_manual(
+    Mat_do_don=(0, 100, 5),
+    Khan_cap=(0, 100, 5),
+    Tai_trong_tai_xe=(0, 100, 5),
+    Giao_thong=(0, 100, 5),
+    Loi_nhuan=(0, 100, 5)
+)
+def run_logistics(Mat_do_don, Khan_cap, Tai_trong_tai_xe, Giao_thong, Loi_nhuan):
+    logistics_sim.input['density'] = Mat_do_don
+    logistics_sim.input['urgency'] = Khan_cap
+    logistics_sim.input['load'] = Tai_trong_tai_xe
+    logistics_sim.input['traffic'] = Giao_thong
+    logistics_sim.input['profit'] = Loi_nhuan
+    
+    try:
+        logistics_sim.compute()
+        res_combine = logistics_sim.output['combine']
+        res_priority = logistics_sim.output['priority']
+        
+        print("\n" + "="*45)
+        print(f"KẾT QUẢ ĐIỀU PHỐI LOGISTICS:")
+        print(f">> Số đơn hàng nên kết hợp: {res_combine:.1f} đơn")
+        print(f">> Mức độ ưu tiên giao hàng: {res_priority:.2f}%")
+        if res_combine >= 7:
+            print("=> Khuyến nghị: Kết hợp NHIỀU đơn hàng (Tối ưu hiệu suất)")
+        elif res_combine >= 4:
+            print("=> Khuyến nghị: Kết hợp MỘT SỐ đơn hàng (Cân bằng)")
+        else:
+            print("=> Khuyến nghị: Kết hợp ÍT đơn hàng (Ưu tiên tốc độ)")
+            
+        print("="*45)
+    except:
+        print("Vui lòng thay đổi thông số để hệ thống tính toán (đang nằm ngoài vùng phủ của luật).")
