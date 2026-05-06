@@ -1,0 +1,69 @@
+import numpy as np
+import skfuzzy as fuzzy
+from skfuzzy import control as ctrl
+from ipywidgets import widgets, interact_manual
+
+demand = ctrl.Antecedent(np.arange(0, 101, 1), 'demand')
+pressure = ctrl.Antecedent(np.arange(0, 101, 1), 'pressure')
+reputation = ctrl.Antecedent(np.arange(1, 6, 0.1), 'reputation')
+margin = ctrl.Antecedent(np.arange(0, 101, 1), 'margin')
+seasonal = ctrl.Antecedent(np.arange(0, 11, 1), 'seasonal')
+discount = ctrl.Consequent(np.arange(0, 71, 1), 'discount')
+for var in [demand, pressure, margin]:
+    var['low'] = fuzzy.trapmf(var.universe, [0, 0, 25, 45])
+    var['medium'] = fuzzy.trimf(var.universe, [35, 50, 75])
+    var['high'] = fuzzy.trapmf(var.universe, [65, 80, 100, 100])
+reputation['low'] = fuzzy.trimf(reputation.universe, [1, 1, 4.0])
+reputation['medium'] = fuzzy.trimf(reputation.universe, [4.0, 4.25, 4.5])
+reputation['high'] = fuzzy.trimf(reputation.universe, [4.5, 5, 5])
+seasonal['none'] = fuzzy.trimf(seasonal.universe, [0, 0, 4])
+seasonal['medium'] = fuzzy.trimf(seasonal.universe, [3, 5, 8])
+seasonal['high'] = fuzzy.trimf(seasonal.universe, [7, 10, 10]
+discount['very_low'] = fuzzy.trimf(discount.universe, [0, 2.5, 5])
+discount['low'] = fuzzy.trimf(discount.universe, [5, 7.5, 10])
+discount['medium'] = fuzzy.trimf(discount.universe, [10, 15, 25]) 
+discount['high'] = fuzzy.trimf(discount.universe, [20, 35, 45])
+discount['very_high'] = fuzzy.trapmf(discount.universe, [40, 55, 70, 70])
+rules = [
+    ctrl.Rule(demand['high'] & pressure['low'] & margin['low'], discount['very_low']),
+    ctrl.Rule(demand['low'] & pressure['high'] & margin['high'], discount['high']),
+    ctrl.Rule(reputation['high'] & margin['medium'] & seasonal['high'], discount['medium']),
+    ctrl.Rule(pressure['high'] & seasonal['high'] & margin['high'], discount['very_high']),
+    ctrl.Rule(reputation['low'] & demand['medium'] & margin['low'], discount['medium']),
+    ctrl.Rule(demand['high'] & seasonal['none'] & pressure['low'], discount['very_low']),
+    ctrl.Rule(margin['high'] & pressure['medium'] & seasonal['medium'], discount['medium'])
+]
+
+discount_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem(rules))-
+print("--- CHIẾN LƯỢC GIẢM GIÁ MẶT HÀNG ĐẶC BIỆT (BÀI 2.13) ---")
+
+@interact_manual(
+    Nhu_cau=(0, 100, 5),
+    Ap_luc_doi_thu=(0, 100, 5),
+    Uy_tin_shop=(1.0, 5.0, 0.1),
+    Bien_loi_nhuan=(0, 100, 5),
+    Mua_vu=(0, 10, 1)
+)
+def run_strategy(Nhu_cau, Ap_luc_doi_thu, Uy_tin_shop, Bien_loi_nhuan, Mua_vu):
+    discount_sim.input['demand'] = Nhu_cau
+    discount_sim.input['pressure'] = Ap_luc_doi_thu
+    discount_sim.input['reputation'] = Uy_tin_shop
+    discount_sim.input['margin'] = Bien_loi_nhuan
+    discount_sim.input['seasonal'] = Mua_vu
+    
+    try:
+        discount_sim.compute()
+        res = discount_sim.output['discount']
+        
+        print("\n" + "="*45)
+        print(f"KẾT QUẢ TÍNH TOÁN CHIẾN LƯỢC:")
+        print(f">> Mức giảm giá đề xuất: {res:.2f}%")
+        if 10 <= res <= 25:
+            print("=> CHIẾN LƯỢC GIẢM GIÁ TRUNG BÌNH (Hợp lý)")
+        elif res > 25:
+            print("=> CHIẾN LƯỢC GIẢM GIÁ MẠNH (Đẩy mạnh doanh số)")
+        else:
+            print("=> CHIẾN LƯỢC GIẢM GIÁ TỐI THIỂU (Bảo vệ giá trị thương hiệu)")
+        print("="*45)
+    except:
+        print("Cần điều chỉnh thêm dữ liệu để hệ thống tính toán.")
