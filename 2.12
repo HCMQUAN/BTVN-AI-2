@@ -1,0 +1,75 @@
+import numpy as np
+import skfuzzy as fuzzy
+from skfuzzy import control as ctrl
+from ipywidgets import widgets, interact_manual
+
+rating = ctrl.Antecedent(np.arange(1, 6, 0.1), 'rating')       
+volume = ctrl.Antecedent(np.arange(0, 101, 1), 'volume')      
+margin = ctrl.Antecedent(np.arange(0, 101, 1), 'margin')      
+seasonal = ctrl.Antecedent(np.arange(0, 11, 1), 'seasonal')    
+competitor = ctrl.Antecedent(np.arange(0, 101, 1), 'competitor') 
+discount = ctrl.Consequent(np.arange(0, 71, 1), 'discount')    
+
+rating['low'] = fuzzy.trimf(rating.universe, [1, 1, 4.0])
+rating['medium'] = fuzzy.trimf(rating.universe, [4.0, 4.25, 4.5])
+rating['high'] = fuzzy.trimf(rating.universe, [4.5, 5, 5])
+
+for var in [volume, margin, competitor]:
+    var['low'] = fuzzy.trapmf(var.universe, [0, 0, 20, 40])
+    var['medium'] = fuzzy.trimf(var.universe, [30, 50, 70])
+    var['high'] = fuzzy.trapmf(var.universe, [60, 80, 100, 100])
+
+seasonal['none'] = fuzzy.trimf(seasonal.universe, [0, 0, 3])
+seasonal['moderate'] = fuzzy.trimf(seasonal.universe, [2, 5, 8])
+seasonal['high'] = fuzzy.trimf(seasonal.universe, [7, 10, 10])
+
+discount['very_low'] = fuzzy.trimf(discount.universe, [0, 2.5, 5])
+discount['low'] = fuzzy.trimf(discount.universe, [5, 7.5, 10])
+discount['medium'] = fuzzy.trimf(discount.universe, [10, 15, 20])
+discount['high'] = fuzzy.trimf(discount.universe, [20, 30, 40])
+discount['very_high'] = fuzzy.trapmf(discount.universe, [40, 55, 70, 70])
+
+rules = [
+    ctrl.Rule(rating['high'] & volume['high'] & margin['high'], discount['very_low']),
+    ctrl.Rule(rating['low'] & volume['low'] & margin['high'], discount['high']),
+    ctrl.Rule(seasonal['high'] & competitor['high'], discount['very_high']),
+    ctrl.Rule(rating['medium'] & volume['medium'], discount['medium']),
+    ctrl.Rule(competitor['low'] & margin['low'] & volume['high'], discount['very_low']),
+    ctrl.Rule(rating['low'] & seasonal['none'], discount['medium']),
+    ctrl.Rule(volume['low'] & margin['low'], discount['very_high'])
+]
+
+shopee_sim = ctrl.ControlSystemSimulation(ctrl.ControlSystem(rules))
+print("--- CHIẾN LƯỢC CHIẾT KHẤU THÔNG MINH SHOPEE ---")
+
+@interact_manual(
+    Store_Rating=(1.0, 5.0, 0.1),
+    Sales_Volume=(0, 100, 5),
+    Profit_Margin=(0, 100, 5),
+    Seasonal_Event=(0, 10, 1),
+    Competitor_Discount=(0, 100, 5)
+)
+def calculate_discount(Store_Rating, Sales_Volume, Profit_Margin, Seasonal_Event, Competitor_Discount):
+    shopee_sim.input['rating'] = Store_Rating
+    shopee_sim.input['volume'] = Sales_Volume
+    shopee_sim.input['margin'] = Profit_Margin
+    shopee_sim.input['seasonal'] = Seasonal_Event
+    shopee_sim.input['competitor'] = Competitor_Discount
+    
+    try:
+        shopee_sim.compute()
+        res = shopee_sim.output['discount']
+        
+        print("\n" + "="*40)
+        print(f"KẾT QUẢ PHÂN TÍCH CHIẾT KHẤU:")
+        print(f"- Đề xuất mức chiết khấu: {res:.2f}%")
+        
+        if 30 <= res <= 40:
+            print("=> Mức chiết khấu CAO (Ưu tiên cạnh tranh & mùa vụ)")
+        elif res < 10:
+            print("=> Mức chiết khấu THẤP (Tối ưu hóa lợi nhuận)")
+        else:
+            print("=> Mức chiết khấu TRUNG BÌNH")
+        print("="*40)
+    except:
+        print("Lưu ý: Các thông số hiện tại chưa khớp với luật mờ cụ thể nào. Hãy điều chỉnh lại.")
